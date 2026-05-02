@@ -21,6 +21,9 @@ export default function Login() {
       password,
     })
 
+    console.log('authError:', authError)
+    console.log('data:', data)
+
     if (authError) {
       setError('Correo o contraseña incorrectos')
       setLoading(false)
@@ -32,6 +35,8 @@ export default function Login() {
       .select('role')
       .eq('id', data.user.id)
       .single()
+
+    console.log('profile:', profile)
 
     if (profile?.role === 'client') {
       navigate('/mis-solicitudes')

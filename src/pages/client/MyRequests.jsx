@@ -1,282 +1,423 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SERVICES } from '../../constants/services'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+
+const SERVICES_MAP = {
+  nails: 'Uñas / Manicure',
+  hair: 'Cabello / Tinte / Corte',
+  makeup: 'Maquillaje',
+  lashes: 'Extensiones de Pestañas',
+  wax: 'Depilación',
+  massage: 'Masaje',
+}
 
 export default function MyRequests() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(null)
-  const [accepting, setAccepting] = useState(null)
-  const [error, setError] = useState(null)
+  const [accepting, setAccepting] = useState(null) // offer id being accepted
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (user) fetchRequests()
+  }, [user])
 
-  async function load() {
-    setError(null)
-    const { data: { user } } = await supabase.auth.getUser()
+  async function fetchRequests() {
+    setLoading(true)
     const { data, error } = await supabase
       .from('requests')
-      .select('*, offers(*, users(full_name, phone))')
+      .select(`
+        *,
+        offers (
+          id,
+          price,
+          message,
+          status,
+          created_at,
+          provider_id,
+          provider_profiles (
+            photo_url,
+            bio,
+            whatsapp,
+            users:user_id (full_name)
+          )
+        )
+      `)
       .eq('client_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error(error)
-      setError('No se pudieron cargar tus solicitudes.')
-    }
-
-    setRequests(data || [])
+    if (!error) setRequests(data || [])
     setLoading(false)
   }
 
-  async function acceptOffer(offer, requestId) {
+  async function acceptOffer(offer, request) {
+    if (accepting) return
     setAccepting(offer.id)
-    setError(null)
 
-    const { error } = await supabase.rpc('accept_offer', {
-      p_offer_id: offer.id,
-      p_request_id: requestId,
-      p_provider_id: offer.provider_id,
-    })
+    try {
+      // 1. Marcar oferta como aceptada
+      const { error: offerErr } = await supabase
+        .from('offers')
+        .update({ status: 'accepted' })
+        .eq('id', offer.id)
 
-    if (error) {
-      setError(error.message || 'Error al aceptar la oferta. Intenta de nuevo.')
+      if (offerErr) throw offerErr
+
+      // 2. Rechazar todas las demás ofertas de esta solicitud
+      await supabase
+        .from('offers')
+        .update({ status: 'rejected' })
+        .eq('request_id', request.id)
+        .neq('id', offer.id)
+
+      // 3. Cerrar la solicitud
+      const { error: reqErr } = await supabase
+        .from('requests')
+        .update({ status: 'closed' })
+        .eq('id', request.id)
+
+      if (reqErr) throw reqErr
+
+      // 4. Descontar 1 crédito a la proveedora (RPC para atomicidad)
+      const { error: creditErr } = await supabase.rpc('spend_credit', {
+        p_provider_id: offer.provider_id,
+        p_request_id: request.id,
+      })
+
+      if (creditErr) {
+        // Si falla el crédito, no bloqueamos — el admin puede revisar en transactions
+        console.error('Error al descontar crédito:', creditErr)
+      }
+
+      // 5. Crear lead desbloqueado
+      const { error: leadErr } = await supabase.from('leads').upsert(
+        {
+          provider_id: offer.provider_id,
+          request_id: request.id,
+          amount_paid: 35,
+          payment_status: 'paid',
+          status: 'paid',
+          unlocked_at: new Date().toISOString(),
+        },
+        { onConflict: 'provider_id,request_id' }
+      )
+
+      if (leadErr) console.error('Error al crear lead:', leadErr)
+
+      await fetchRequests()
+    } catch (e) {
+      console.error('Error al aceptar oferta:', e)
+      alert('Hubo un error. Intenta de nuevo.')
+    } finally {
+      setAccepting(null)
     }
-
-    setAccepting(null)
-    load()
   }
 
-  function getServiceLabel(id) {
-    return SERVICES.find(s => s.id === id)?.label || id
+  // ─── Styles ───────────────────────────────────────────────────────────────
+  const s = {
+    page: {
+      minHeight: '100vh',
+      background: '#0a0010',
+      color: '#f3e8ff',
+      fontFamily: 'system-ui, sans-serif',
+      padding: '24px 16px 80px',
+      maxWidth: 480,
+      margin: '0 auto',
+    },
+    header: {
+      fontSize: 22,
+      fontWeight: 800,
+      marginBottom: 20,
+      color: '#e9d5ff',
+    },
+    newBtn: {
+      display: 'block',
+      width: '100%',
+      padding: '13px',
+      background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+      border: 'none',
+      borderRadius: 12,
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: 700,
+      cursor: 'pointer',
+      marginBottom: 24,
+      textAlign: 'center',
+    },
+    card: {
+      background: '#12001f',
+      border: '1px solid #3b0764',
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 16,
+    },
+    tag: {
+      display: 'inline-block',
+      background: '#3b0764',
+      color: '#e9d5ff',
+      borderRadius: 20,
+      padding: '3px 10px',
+      fontSize: 11,
+      marginBottom: 8,
+    },
+    statusTag: (status) => ({
+      display: 'inline-block',
+      borderRadius: 20,
+      padding: '3px 10px',
+      fontSize: 11,
+      marginLeft: 6,
+      background: status === 'open' ? '#0d2d0d' : '#1c0a00',
+      color: status === 'open' ? '#4ade80' : '#fb923c',
+    }),
+    requestTitle: {
+      fontSize: 17,
+      fontWeight: 700,
+      marginBottom: 4,
+      color: '#f3e8ff',
+    },
+    requestSub: {
+      fontSize: 13,
+      color: '#a78bfa',
+      marginBottom: 12,
+    },
+    offersSection: {
+      borderTop: '1px solid #2d0060',
+      paddingTop: 12,
+      marginTop: 8,
+    },
+    offersLabel: {
+      fontSize: 13,
+      color: '#7c3aed',
+      fontWeight: 600,
+      marginBottom: 10,
+    },
+    offerCard: (isAccepted) => ({
+      background: isAccepted ? '#0d2d0d' : '#0d0018',
+      border: `1px solid ${isAccepted ? '#4ade80' : '#2d0060'}`,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+    }),
+    providerName: {
+      fontWeight: 700,
+      fontSize: 14,
+      marginBottom: 2,
+      color: '#e9d5ff',
+    },
+    offerPrice: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: '#a855f7',
+      marginBottom: 6,
+    },
+    offerMsg: {
+      fontSize: 13,
+      color: '#c4b5fd',
+      marginBottom: 10,
+      lineHeight: 1.5,
+    },
+    acceptBtn: {
+      background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+      border: 'none',
+      borderRadius: 8,
+      color: '#fff',
+      padding: '9px 18px',
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: 'pointer',
+      width: '100%',
+    },
+    acceptedBadge: {
+      background: '#4ade80',
+      color: '#052e16',
+      borderRadius: 8,
+      padding: '6px 12px',
+      fontSize: 12,
+      fontWeight: 700,
+      display: 'inline-block',
+    },
+    noOffers: {
+      fontSize: 13,
+      color: '#6d28d9',
+      fontStyle: 'italic',
+    },
+    empty: {
+      textAlign: 'center',
+      color: '#6d28d9',
+      paddingTop: 60,
+      fontSize: 15,
+    },
   }
 
   if (loading) {
     return (
-      <div style={{ ...styles.container, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#9ca3af' }}>Cargando...</p>
+      <div style={{ ...s.page, textAlign: 'center', paddingTop: 80 }}>
+        <div style={{ color: '#a855f7' }}>Cargando...</div>
       </div>
     )
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>Bellason</h1>
-        <p style={styles.subtitle}>Mis solicitudes</p>
-      </div>
+    <div style={s.page}>
+      <div style={s.header}>Mis solicitudes</div>
 
-      {error && (
-        <div style={styles.errorBox}>
-          <p style={styles.errorText}>{error}</p>
-        </div>
-      )}
-
-      <button style={styles.newButton} onClick={() => navigate('/nueva-solicitud')}>
+      <button style={s.newBtn} onClick={() => navigate('/nueva-solicitud')}>
         + Nueva solicitud
       </button>
 
-      {requests.length === 0 && !error && (
-        <div style={styles.empty}>
-          <p>No tienes solicitudes aún.</p>
+      {requests.length === 0 && (
+        <div style={s.empty}>
+          No tienes solicitudes aún.
+          <br />
+          <span style={{ color: '#a855f7' }}>¡Publica la primera gratis!</span>
         </div>
       )}
 
       {requests.map(req => {
-        const visibleOffers = (req.offers || []).filter(o => o.status !== 'rejected')
-        const acceptedOffer = visibleOffers.find(o => o.status === 'accepted')
+        const offers = req.offers || []
+        const pendingOffers = offers.filter(o => o.status === 'pending')
+        const acceptedOffer = offers.find(o => o.status === 'accepted')
+        const sortedOffers = [
+          ...offers.filter(o => o.status === 'accepted'),
+          ...offers.filter(o => o.status === 'pending').sort((a, b) => a.price - b.price),
+          ...offers.filter(o => o.status === 'rejected'),
+        ]
 
         return (
-          <div key={req.id} style={styles.card}>
-            <div style={styles.cardTop}>
-              <span style={styles.service}>{getServiceLabel(req.service)}</span>
-              <span style={req.status === 'open' ? styles.open : styles.closed}>
+          <div key={req.id} style={s.card}>
+            {/* Header de solicitud */}
+            <div>
+              <span style={s.tag}>{SERVICES_MAP[req.service] || req.service}</span>
+              <span style={s.statusTag(req.status)}>
                 {req.status === 'open' ? 'Abierta' : 'Cerrada'}
               </span>
             </div>
-
-            <p style={styles.zone}>📍 {req.zone}</p>
-            {req.description && <p style={styles.description}>{req.description}</p>}
-
-            {/* Oferta aceptada — siempre visible si existe */}
-            {acceptedOffer && (
-              <div style={styles.acceptedBox}>
-                <p style={styles.acceptedText}>✅ Oferta aceptada</p>
-                <p style={styles.acceptedName}>{acceptedOffer.users?.full_name || 'Proveedora'}</p>
-                <p style={styles.acceptedPrice}>${acceptedOffer.price} MXN</p>
-                <p style={styles.phoneText}>📞 {acceptedOffer.users?.phone || 'Sin teléfono'}</p>
+            <div style={s.requestTitle}>{req.zone}</div>
+            {req.description && (
+              <div style={{ fontSize: 13, color: '#c4b5fd', marginBottom: 6, lineHeight: 1.4 }}>
+                {req.description}
               </div>
             )}
+            <div style={s.requestSub}>
+              {req.budget_min && req.budget_max
+                ? `Presupuesto: $${req.budget_min} – $${req.budget_max} MXN`
+                : 'Sin presupuesto especificado'}
+              {' · '}
+              {new Date(req.created_at).toLocaleDateString('es-MX', {
+                day: 'numeric',
+                month: 'short',
+              })}
+            </div>
 
-            {/* Otras ofertas — solo si la solicitud está abierta */}
-            {req.status === 'open' && (
-              <div style={styles.offersRow}>
-                <span style={styles.offersCount}>
-                  {visibleOffers.length} oferta{visibleOffers.length !== 1 ? 's' : ''}
-                </span>
-                {visibleOffers.length > 0 && (
-                  <button
-                    style={styles.toggleBtn}
-                    onClick={() => setExpanded(expanded === req.id ? null : req.id)}
-                  >
-                    {expanded === req.id ? 'Ocultar' : 'Ver ofertas'}
-                  </button>
-                )}
+            {/* Ofertas */}
+            <div style={s.offersSection}>
+              <div style={s.offersLabel}>
+                {offers.length === 0
+                  ? 'Sin ofertas aún'
+                  : `${offers.length} oferta${offers.length > 1 ? 's' : ''}`}
+                {pendingOffers.length > 0 && ` · ${pendingOffers.length} pendiente${pendingOffers.length > 1 ? 's' : ''}`}
               </div>
-            )}
 
-            {expanded === req.id && req.status === 'open' && (
-              <div style={styles.offersList}>
-                {visibleOffers.map(offer => (
-                  <div key={offer.id} style={styles.offerCard}>
-                    <div style={styles.offerTop}>
-                      <span style={styles.offerName}>
-                        {offer.users?.full_name || 'Proveedora'}
-                      </span>
-                      <span style={styles.offerPrice}>${offer.price} MXN</span>
+              {offers.length === 0 && (
+                <div style={s.noOffers}>Las proveedoras verán tu solicitud y harán ofertas.</div>
+              )}
+
+              {sortedOffers.map(offer => {
+                const isAccepted = offer.status === 'accepted'
+                const isRejected = offer.status === 'rejected'
+                const profile = offer.provider_profiles
+                const provName = profile?.users?.full_name || 'Proveedora'
+
+                return (
+                  <div key={offer.id} style={s.offerCard(isAccepted)}>
+                    <div style={s.providerName}>
+                      {profile?.photo_url && (
+                        <img
+                          src={profile.photo_url}
+                          alt=""
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            marginRight: 8,
+                            verticalAlign: 'middle',
+                          }}
+                        />
+                      )}
+                      {provName}
+                      {isAccepted && (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            background: '#4ade80',
+                            color: '#052e16',
+                            borderRadius: 6,
+                            padding: '1px 7px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Aceptada
+                        </span>
+                      )}
                     </div>
 
-                    {offer.message && (
-                      <p style={styles.offerMsg}>{offer.message}</p>
-                    )}
+                    <div style={s.offerPrice}>${offer.price} MXN</div>
 
-                    {offer.status === 'pending' && (
+                    {offer.message && <div style={s.offerMsg}>{offer.message}</div>}
+
+                    {/* Botón aceptar solo si solicitud abierta y oferta pendiente */}
+                    {req.status === 'open' && offer.status === 'pending' && !acceptedOffer && (
                       <button
                         style={{
-                          ...styles.acceptBtn,
+                          ...s.acceptBtn,
                           opacity: accepting === offer.id ? 0.6 : 1,
                           cursor: accepting === offer.id ? 'not-allowed' : 'pointer',
                         }}
-                        disabled={accepting !== null}
-                        onClick={() => acceptOffer(offer, req.id)}
+                        onClick={() => acceptOffer(offer, req)}
+                        disabled={!!accepting}
                       >
-                        {accepting === offer.id ? 'Aceptando...' : '✓ Aceptar oferta'}
+                        {accepting === offer.id ? 'Procesando...' : '✅ Aceptar oferta'}
                       </button>
                     )}
+
+                    {/* Si ya fue aceptada → WhatsApp */}
+                    {isAccepted && profile?.whatsapp && (
+                      <a
+                        href={`https://wa.me/52${profile.whatsapp.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(provName)}%2C%20te%20contacto%20por%20Bellason%20%F0%9F%92%85`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'block',
+                          background: '#25D366',
+                          color: '#fff',
+                          borderRadius: 8,
+                          padding: '9px',
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          textDecoration: 'none',
+                          marginTop: 8,
+                        }}
+                      >
+                        💬 Contactar por WhatsApp
+                      </a>
+                    )}
+
+                    {isRejected && (
+                      <div style={{ fontSize: 11, color: '#6d28d9', marginTop: 4 }}>
+                        No seleccionada
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              })}
+            </div>
           </div>
         )
       })}
     </div>
   )
-}
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#0a0010',
-    padding: '1.5rem 1rem',
-    maxWidth: '480px',
-    margin: '0 auto',
-  },
-  header: { marginBottom: '1.5rem' },
-  title: { color: '#a855f7', fontSize: '1.75rem', fontWeight: '700', margin: 0 },
-  subtitle: { color: '#9ca3af', margin: '0.25rem 0 0' },
-  errorBox: {
-    backgroundColor: '#2d0a0a',
-    border: '1px solid #7f1d1d',
-    borderRadius: '8px',
-    padding: '0.75rem 1rem',
-    marginBottom: '1rem',
-  },
-  errorText: { color: '#f87171', margin: 0, fontSize: '0.9rem' },
-  newButton: {
-    width: '100%',
-    padding: '0.85rem',
-    borderRadius: '8px',
-    border: '1px dashed #7c3aed',
-    backgroundColor: 'transparent',
-    color: '#a855f7',
-    fontWeight: '600',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    marginBottom: '1.5rem',
-  },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: '3rem' },
-  card: {
-    backgroundColor: '#12001f',
-    border: '1px solid #3b0764',
-    borderRadius: '12px',
-    padding: '1rem',
-    marginBottom: '1rem',
-  },
-  cardTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '0.5rem',
-  },
-  service: { color: '#a855f7', fontWeight: '700', fontSize: '1rem' },
-  open: {
-    backgroundColor: '#14532d', color: '#4ade80',
-    padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem',
-  },
-  closed: {
-    backgroundColor: '#1f1f1f', color: '#6b7280',
-    padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem',
-  },
-  zone: { color: '#9ca3af', fontSize: '0.9rem', margin: '0.25rem 0' },
-  description: { color: '#d1d5db', fontSize: '0.9rem', margin: '0.25rem 0' },
-  offersRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: '0.75rem',
-    paddingTop: '0.75rem',
-    borderTop: '1px solid #3b0764',
-  },
-  offersCount: { color: '#9ca3af', fontSize: '0.85rem' },
-  toggleBtn: {
-    padding: '0.4rem 0.85rem',
-    borderRadius: '20px',
-    border: 'none',
-    backgroundColor: '#7c3aed',
-    color: '#fff',
-    fontSize: '0.85rem',
-    cursor: 'pointer',
-    fontWeight: '600',
-  },
-  offersList: { marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-  offerCard: {
-    backgroundColor: '#0d0018',
-    border: '1px solid #3b0764',
-    borderRadius: '8px',
-    padding: '0.75rem',
-  },
-  offerTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '0.25rem',
-  },
-  offerName: { color: '#d8b4fe', fontWeight: '600', fontSize: '0.9rem' },
-  offerPrice: { color: '#a855f7', fontWeight: '700', fontSize: '1rem' },
-  offerMsg: { color: '#9ca3af', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' },
-  acceptBtn: {
-    width: '100%',
-    padding: '0.6rem',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: '#7c3aed',
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: '0.9rem',
-    marginTop: '0.5rem',
-  },
-  acceptedBox: {
-    backgroundColor: '#052e16',
-    border: '1px solid #166534',
-    borderRadius: '8px',
-    padding: '0.75rem',
-    marginTop: '0.75rem',
-  },
-  acceptedText: { color: '#4ade80', fontWeight: '700', margin: '0 0 0.4rem' },
-  acceptedName: { color: '#86efac', fontWeight: '600', fontSize: '0.95rem', margin: '0 0 0.15rem' },
-  acceptedPrice: { color: '#4ade80', fontSize: '0.9rem', margin: '0 0 0.25rem' },
-  phoneText: { color: '#86efac', fontSize: '0.9rem', margin: 0 },
 }

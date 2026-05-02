@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { subscribeToPush } from './usePushNotifications'
 
 export function useAuth() {
   const [user, setUser]       = useState(null)
@@ -17,6 +18,7 @@ export function useAuth() {
           .eq('id', session.user.id)
           .single()
         setRole(profile?.role)
+        subscribeToPush(session.user.id)
       }
       setLoading(false)
     })

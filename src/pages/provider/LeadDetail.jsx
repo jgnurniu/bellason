@@ -21,7 +21,7 @@ export default function LeadDetail() {
 
       const [{ data: req }, { data: credit }, { data: offer }] = await Promise.all([
         supabase.from('requests').select('*').eq('id', requestId).single(),
-        supabase.from('credits').select('balance').eq('provider_id', user.id).single(),
+        supabase.from('credits').select('balance').eq('user_id', user.id).single(),
         supabase.from('offers').select('*').eq('request_id', requestId).eq('provider_id', user.id).maybeSingle(),
       ])
 
@@ -376,7 +376,7 @@ const styles = {
     padding: '0.75rem 1rem',
     borderRadius: '8px',
     border: '1px solid #3b0764',
-    backgroundColor: '0d0018',
+    backgroundColor: '#0d0018',
     color: '#fff',
     fontSize: '0.95rem',
     outline: 'none',

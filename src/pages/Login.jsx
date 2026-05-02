@@ -4,12 +4,12 @@ import { useNavigate, Link } from 'react-router-dom'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [email, setEmail]         = useState('')
-  const [password, setPassword]   = useState('')
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState(null)
+  const [email, setEmail]           = useState('')
+  const [password, setPassword]     = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
   const [forgotMode, setForgotMode] = useState(false)
-  const [sent, setSent]           = useState(false)
+  const [sent, setSent]             = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -20,9 +20,6 @@ export default function Login() {
       email,
       password,
     })
-
-    console.log('authError:', authError)
-    console.log('data:', data)
 
     if (authError) {
       setError('Correo o contraseña incorrectos')
@@ -36,12 +33,10 @@ export default function Login() {
       .eq('id', data.user.id)
       .single()
 
-    console.log('profile:', profile)
-
     if (profile?.role === 'client') {
-      navigate('/mis-solicitudes')
+      navigate('/mis-solicitudes', { replace: true })
     } else if (profile?.role === 'provider') {
-      navigate('/solicitudes')
+      navigate('/solicitudes', { replace: true })
     } else {
       setError('No se encontró el perfil.')
       setLoading(false)
@@ -54,7 +49,7 @@ export default function Login() {
     setError(null)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'http://localhost:5173/reset-password',
+      redirectTo: `${window.location.origin}/reset-password`,
     })
 
     if (error) {

@@ -17,7 +17,7 @@ export default function MyRequests() {
   const navigate = useNavigate()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
-  const [accepting, setAccepting] = useState(null) // offer id being accepted
+  const [accepting, setAccepting] = useState(null)
 
   useEffect(() => {
     if (user) fetchRequests()
@@ -56,41 +56,30 @@ export default function MyRequests() {
     setAccepting(offer.id)
 
     try {
-      // 1. Marcar oferta como aceptada
       const { error: offerErr } = await supabase
         .from('offers')
         .update({ status: 'accepted' })
         .eq('id', offer.id)
-
       if (offerErr) throw offerErr
 
-      // 2. Rechazar todas las demás ofertas de esta solicitud
       await supabase
         .from('offers')
         .update({ status: 'rejected' })
         .eq('request_id', request.id)
         .neq('id', offer.id)
 
-      // 3. Cerrar la solicitud
       const { error: reqErr } = await supabase
         .from('requests')
         .update({ status: 'closed' })
         .eq('id', request.id)
-
       if (reqErr) throw reqErr
 
-      // 4. Descontar 1 crédito a la proveedora (RPC para atomicidad)
       const { error: creditErr } = await supabase.rpc('spend_credit', {
         p_provider_id: offer.provider_id,
         p_request_id: request.id,
       })
+      if (creditErr) console.error('Error al descontar crédito:', creditErr)
 
-      if (creditErr) {
-        // Si falla el crédito, no bloqueamos — el admin puede revisar en transactions
-        console.error('Error al descontar crédito:', creditErr)
-      }
-
-      // 5. Crear lead desbloqueado
       const { error: leadErr } = await supabase.from('leads').upsert(
         {
           provider_id: offer.provider_id,
@@ -102,7 +91,6 @@ export default function MyRequests() {
         },
         { onConflict: 'provider_id,request_id' }
       )
-
       if (leadErr) console.error('Error al crear lead:', leadErr)
 
       await fetchRequests()
@@ -199,11 +187,43 @@ export default function MyRequests() {
       padding: 14,
       marginBottom: 10,
     }),
+    // Fila clickeable del proveedor — navega al perfil
+    providerRow: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+      cursor: 'pointer',
+      WebkitTapHighlightColor: 'transparent',
+    },
+    providerAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: '50%',
+      objectFit: 'cover',
+      border: '2px solid #3b0764',
+      flexShrink: 0,
+    },
+    providerAvatarPlaceholder: {
+      width: 36,
+      height: 36,
+      borderRadius: '50%',
+      background: 'linear-gradient(135deg, #3b0764, #7c3aed)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 16,
+      flexShrink: 0,
+    },
     providerName: {
       fontWeight: 700,
       fontSize: 14,
-      marginBottom: 2,
       color: '#e9d5ff',
+    },
+    viewProfile: {
+      fontSize: 11,
+      color: '#7c3aed',
+      marginLeft: 'auto',
     },
     offerPrice: {
       fontSize: 20,
@@ -227,15 +247,6 @@ export default function MyRequests() {
       fontWeight: 700,
       cursor: 'pointer',
       width: '100%',
-    },
-    acceptedBadge: {
-      background: '#4ade80',
-      color: '#052e16',
-      borderRadius: 8,
-      padding: '6px 12px',
-      fontSize: 12,
-      fontWeight: 700,
-      display: 'inline-block',
     },
     noOffers: {
       fontSize: 13,
@@ -286,7 +297,6 @@ export default function MyRequests() {
 
         return (
           <div key={req.id} style={s.card}>
-            {/* Header de solicitud */}
             <div>
               <span style={s.tag}>{SERVICES_MAP[req.service] || req.service}</span>
               <span style={s.statusTag(req.status)}>
@@ -305,12 +315,10 @@ export default function MyRequests() {
                 : 'Sin presupuesto especificado'}
               {' · '}
               {new Date(req.created_at).toLocaleDateString('es-MX', {
-                day: 'numeric',
-                month: 'short',
+                day: 'numeric', month: 'short',
               })}
             </div>
 
-            {/* Ofertas */}
             <div style={s.offersSection}>
               <div style={s.offersLabel}>
                 {offers.length === 0
@@ -331,44 +339,53 @@ export default function MyRequests() {
 
                 return (
                   <div key={offer.id} style={s.offerCard(isAccepted)}>
-                    <div style={s.providerName}>
-                      {profile?.photo_url && (
+
+                    {/* Proveedor — clickeable → perfil */}
+                    <div
+                      style={s.providerRow}
+                      onClick={() => navigate(`/proveedor/${offer.provider_id}`)}
+                      role="button"
+                      aria-label={`Ver perfil de ${provName}`}
+                    >
+                      {profile?.photo_url ? (
                         <img
                           src={profile.photo_url}
-                          alt=""
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                            marginRight: 8,
-                            verticalAlign: 'middle',
-                          }}
+                          alt={provName}
+                          style={s.providerAvatar}
                         />
+                      ) : (
+                        <div style={s.providerAvatarPlaceholder}>💅</div>
                       )}
-                      {provName}
-                      {isAccepted && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            background: '#4ade80',
-                            color: '#052e16',
-                            borderRadius: 6,
-                            padding: '1px 7px',
-                            fontSize: 11,
-                            fontWeight: 700,
-                          }}
-                        >
-                          Aceptada
-                        </span>
-                      )}
+
+                      <div>
+                        <div style={s.providerName}>
+                          {provName}
+                          {isAccepted && (
+                            <span style={{
+                              marginLeft: 8,
+                              background: '#4ade80',
+                              color: '#052e16',
+                              borderRadius: 6,
+                              padding: '1px 7px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                            }}>
+                              Aceptada
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <span style={s.viewProfile}>Ver perfil →</span>
                     </div>
 
                     <div style={s.offerPrice}>${offer.price} MXN</div>
 
-                    {offer.message && <div style={s.offerMsg}>{offer.message}</div>}
+                    {offer.message && (
+                      <div style={s.offerMsg}>{offer.message}</div>
+                    )}
 
-                    {/* Botón aceptar solo si solicitud abierta y oferta pendiente */}
+                    {/* Aceptar */}
                     {req.status === 'open' && offer.status === 'pending' && !acceptedOffer && (
                       <button
                         style={{
@@ -383,7 +400,7 @@ export default function MyRequests() {
                       </button>
                     )}
 
-                    {/* Si ya fue aceptada → WhatsApp */}
+                    {/* WhatsApp — solo si fue aceptada */}
                     {isAccepted && profile?.whatsapp && (
                       <a
                         href={`https://wa.me/52${profile.whatsapp.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(provName)}%2C%20te%20contacto%20por%20Bellason%20%F0%9F%92%85`}

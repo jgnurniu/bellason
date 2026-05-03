@@ -6,7 +6,8 @@ import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    {/* Agregamos el basename aquí */}
+    <BrowserRouter basename="/bellason">
       <App />
     </BrowserRouter>
   </StrictMode>,

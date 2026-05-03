@@ -13,17 +13,16 @@ const SERVICES_MAP = {
 }
 
 const STATUS_LABEL = {
-  paid: { label: 'Confirmado', color: '#a855f7', bg: '#1a0035', border: '#3b0764' },
-  arrived: { label: 'En camino / Llegué', color: '#4ade80', bg: '#0d2d0d', border: '#166534' },
-  completed: { label: 'Completado', color: '#9ca3af', bg: '#111', border: '#374151' },
+  por_confirmar: { label: 'En proceso', color: '#fbbf24', bg: '#1c1000', border: '#92400e' },
+  completed:     { label: 'Completado', color: '#9ca3af', bg: '#111',    border: '#374151' },
 }
 
 export default function MyLeads() {
-  const { user } = useAuth()
-  const navigate = useNavigate()
-  const [leads, setLeads] = useState([])
+  const { user }   = useAuth()
+  const navigate   = useNavigate()
+  const [leads, setLeads]     = useState([])
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState(null) // lead id en proceso
+  const [tab, setTab]         = useState('active')
 
   useEffect(() => {
     if (user) fetchLeads()
@@ -44,7 +43,11 @@ export default function MyLeads() {
           budget_min,
           budget_max,
           preferred_date,
-          client_id
+          client_id,
+          users:client_id (
+            full_name,
+            phone
+          )
         ),
         offers (
           price,
@@ -59,53 +62,6 @@ export default function MyLeads() {
     setLoading(false)
   }
 
-  async function markArrived(lead) {
-    if (updating) return
-    setUpdating(lead.id)
-
-    const { error } = await supabase
-      .from('leads')
-      .update({ status: 'arrived' })
-      .eq('id', lead.id)
-      .eq('provider_id', user.id)
-
-    if (error) {
-      alert('Error al actualizar. Intenta de nuevo.')
-      console.error(error)
-    } else {
-      await fetchLeads()
-    }
-    setUpdating(null)
-  }
-
-  async function markCompleted(lead) {
-    if (updating) return
-    setUpdating(lead.id)
-
-    const { error } = await supabase
-      .from('leads')
-      .update({ status: 'completed' })
-      .eq('id', lead.id)
-      .eq('provider_id', user.id)
-
-    if (error) {
-      alert('Error al actualizar. Intenta de nuevo.')
-      console.error(error)
-    } else {
-      await fetchLeads()
-    }
-    setUpdating(null)
-  }
-
-  function openWaze(zone) {
-    // Sin coordenadas exactas, abrir búsqueda por nombre de zona + Hermosillo
-    const query = encodeURIComponent(`${zone}, Hermosillo, Sonora`)
-    const waze = `https://waze.com/ul?q=${query}&navigate=yes`
-    const maps = `https://maps.google.com/?q=${query}`
-    // Intentar Waze primero, Google Maps como fallback
-    window.open(waze, '_blank')
-  }
-
   // ─── Styles ───────────────────────────────────────────────────────────────
   const s = {
     page: {
@@ -117,12 +73,25 @@ export default function MyLeads() {
       margin: '0 auto',
       padding: '24px 16px 80px',
     },
-    header: {
-      fontSize: 22,
-      fontWeight: 800,
-      color: '#e9d5ff',
+    header: { fontSize: 22, fontWeight: 800, color: '#e9d5ff', marginBottom: 20 },
+    tabs: {
+      display: 'flex',
       marginBottom: 20,
+      background: '#12001f',
+      borderRadius: 10,
+      border: '1px solid #3b0764',
+      overflow: 'hidden',
     },
+    tab: (active) => ({
+      flex: 1,
+      padding: '9px',
+      background: active ? '#3b0764' : 'transparent',
+      border: 'none',
+      color: active ? '#e9d5ff' : '#6d28d9',
+      fontSize: 13,
+      fontWeight: active ? 700 : 400,
+      cursor: 'pointer',
+    }),
     card: {
       background: '#12001f',
       border: '1px solid #3b0764',
@@ -145,7 +114,7 @@ export default function MyLeads() {
       fontSize: 11,
     },
     statusTag: (status) => {
-      const st = STATUS_LABEL[status] || STATUS_LABEL.paid
+      const st = STATUS_LABEL[status] || STATUS_LABEL.por_confirmar
       return {
         display: 'inline-block',
         background: st.bg,
@@ -157,70 +126,51 @@ export default function MyLeads() {
         fontWeight: 600,
       }
     },
-    zone: {
-      fontSize: 18,
-      fontWeight: 800,
-      color: '#f3e8ff',
-      marginBottom: 4,
+    zone:  { fontSize: 18, fontWeight: 800, color: '#f3e8ff', marginBottom: 4 },
+    desc:  { fontSize: 13, color: '#c4b5fd', marginBottom: 8, lineHeight: 1.4 },
+    price: { fontSize: 22, fontWeight: 800, color: '#a855f7', marginBottom: 12 },
+    unlockedAt: { fontSize: 12, color: '#4c1d95', marginBottom: 14 },
+    divider: { height: 1, background: '#1a0035', margin: '12px 0' },
+
+    // Bloque de contacto
+    contactBox: {
+      background: '#0d0020',
+      border: '1px solid #4c1d95',
+      borderRadius: 12,
+      padding: '14px 16px',
+      marginTop: 4,
     },
-    desc: {
+    contactLegend: {
       fontSize: 13,
       color: '#c4b5fd',
-      marginBottom: 8,
-      lineHeight: 1.4,
-    },
-    price: {
-      fontSize: 22,
-      fontWeight: 800,
-      color: '#a855f7',
       marginBottom: 12,
+      lineHeight: 1.5,
+      textAlign: 'center',
     },
-    unlockedAt: {
+    whatsappBtn: {
+      display: 'block',
+      width: '100%',
+      padding: '11px',
+      background: '#25D366',
+      border: 'none',
+      borderRadius: 10,
+      color: '#fff',
+      fontWeight: 700,
+      fontSize: 14,
+      cursor: 'pointer',
+      textDecoration: 'none',
+      textAlign: 'center',
+    },
+    waitingBox: {
+      background: '#1c1000',
+      border: '1px solid #92400e',
+      borderRadius: 10,
+      padding: '10px 14px',
+      marginTop: 8,
       fontSize: 12,
-      color: '#4c1d95',
-      marginBottom: 14,
-    },
-    divider: {
-      height: 1,
-      background: '#1a0035',
-      margin: '12px 0',
-    },
-    btnRow: {
-      display: 'flex',
-      gap: 8,
-    },
-    wazeBtn: {
-      flex: 1,
-      padding: '10px',
-      background: '#06c0e0',
-      border: 'none',
-      borderRadius: 10,
-      color: '#fff',
-      fontWeight: 700,
-      fontSize: 13,
-      cursor: 'pointer',
-    },
-    arrivedBtn: {
-      flex: 1,
-      padding: '10px',
-      background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-      border: 'none',
-      borderRadius: 10,
-      color: '#fff',
-      fontWeight: 700,
-      fontSize: 13,
-      cursor: 'pointer',
-    },
-    completedBtn: {
-      flex: 1,
-      padding: '10px',
-      background: '#052e16',
-      border: '1px solid #166534',
-      borderRadius: 10,
-      color: '#4ade80',
-      fontWeight: 700,
-      fontSize: 13,
-      cursor: 'pointer',
+      color: '#fbbf24',
+      lineHeight: 1.5,
+      textAlign: 'center',
     },
     completedDone: {
       textAlign: 'center',
@@ -235,33 +185,11 @@ export default function MyLeads() {
       fontSize: 15,
       lineHeight: 2,
     },
-    tabs: {
-      display: 'flex',
-      gap: 0,
-      marginBottom: 20,
-      background: '#12001f',
-      borderRadius: 10,
-      border: '1px solid #3b0764',
-      overflow: 'hidden',
-    },
-    tab: (active) => ({
-      flex: 1,
-      padding: '9px',
-      background: active ? '#3b0764' : 'transparent',
-      border: 'none',
-      color: active ? '#e9d5ff' : '#6d28d9',
-      fontSize: 13,
-      fontWeight: active ? 700 : 400,
-      cursor: 'pointer',
-    }),
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState('active') // 'active' | 'completed'
-
-  const activeLeads = leads.filter(l => l.status !== 'completed')
+  const activeLeads    = leads.filter(l => l.status !== 'completed')
   const completedLeads = leads.filter(l => l.status === 'completed')
-  const shown = tab === 'active' ? activeLeads : completedLeads
+  const shown          = tab === 'active' ? activeLeads : completedLeads
 
   if (loading) {
     return (
@@ -275,7 +203,6 @@ export default function MyLeads() {
     <div style={s.page}>
       <div style={s.header}>Mis leads</div>
 
-      {/* Tabs */}
       {leads.length > 0 && (
         <div style={s.tabs}>
           <button style={s.tab(tab === 'active')} onClick={() => setTab('active')}>
@@ -304,10 +231,17 @@ export default function MyLeads() {
       )}
 
       {shown.map(lead => {
-        const req = lead.requests
-        const offer = lead.offers?.[0]
-        const st = lead.status
-        const isUpdating = updating === lead.id
+        const req      = lead.requests
+        const offer    = lead.offers?.[0]
+        const client   = req?.users
+        const st       = lead.status
+
+        const clientPhone = client?.phone?.replace(/\D/g, '') || null
+        const clientName  = client?.full_name || 'la clienta'
+
+        const waLink = clientPhone
+          ? `https://wa.me/52${clientPhone}?text=Hola%20${encodeURIComponent(clientName)}%2C%20soy%20tu%20proveedora%20de%20Bellason%20%F0%9F%92%85%20%C2%BFA%20qu%C3%A9%20hora%20nos%20coordinamos%3F`
+          : null
 
         return (
           <div key={lead.id} style={s.card}>
@@ -335,53 +269,37 @@ export default function MyLeads() {
             <div style={s.unlockedAt}>
               Desbloqueado el{' '}
               {new Date(lead.unlocked_at).toLocaleDateString('es-MX', {
-                day: 'numeric', month: 'long', year: 'numeric'
+                day: 'numeric', month: 'long', year: 'numeric',
               })}
             </div>
 
-            {/* Acciones según status */}
             {st === 'completed' ? (
               <div style={s.completedDone}>✅ Servicio completado</div>
             ) : (
               <>
                 <div style={s.divider} />
-                <div style={s.btnRow}>
-                  {/* Waze */}
-                  <button
-                    style={s.wazeBtn}
-                    onClick={() => openWaze(req?.zone)}
-                  >
-                    🗺️ Ir con Waze
-                  </button>
 
-                  {/* Ya llegué o Completado */}
-                  {st === 'paid' && (
-                    <button
-                      style={{
-                        ...s.arrivedBtn,
-                        opacity: isUpdating ? 0.6 : 1,
-                        cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      }}
-                      onClick={() => markArrived(lead)}
-                      disabled={isUpdating}
-                    >
-                      {isUpdating ? '...' : '📍 Ya llegué'}
-                    </button>
-                  )}
+                {/* Contacto con cliente */}
+                <div style={s.contactBox}>
+                  <div style={s.contactLegend}>
+                    🙌 Tu oferta fue aceptada. Por favor contáctate con tu clienta para coordinar el servicio.
+                  </div>
 
-                  {st === 'arrived' && (
-                    <button
-                      style={{
-                        ...s.completedBtn,
-                        opacity: isUpdating ? 0.6 : 1,
-                        cursor: isUpdating ? 'not-allowed' : 'pointer',
-                      }}
-                      onClick={() => markCompleted(lead)}
-                      disabled={isUpdating}
-                    >
-                      {isUpdating ? '...' : '✅ Completar'}
-                    </button>
+                  {waLink ? (
+                    <a href={waLink} target="_blank" rel="noreferrer" style={s.whatsappBtn}>
+                      💬 Contactar a {clientName} por WhatsApp
+                    </a>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#6d28d9', textAlign: 'center' }}>
+                      Teléfono no disponible.
+                    </div>
                   )}
+                </div>
+
+                {/* Aviso de bloqueo */}
+                <div style={s.waitingBox}>
+                  ⏳ Estarás bloqueada hasta que la clienta confirme que el servicio fue realizado.
+                  Puedes pedirle que lo libere en su app.
                 </div>
               </>
             )}

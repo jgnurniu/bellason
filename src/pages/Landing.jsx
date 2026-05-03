@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-const heroImg = "/hero-v2.png";
+const heroImg = "https://github.com/jgnurniu/bellason/blob/main/public/hero-v2.png?raw=true";
 
 function useBreakpoint() {
   const [width, setWidth] = useState(
@@ -182,7 +182,7 @@ export default function Landing() {
         position: "relative",
         overflow: "visible",
       }}>
-        {/* Deep purple radial glow — matches image background */}
+        {/* Deep purple radial glow */}
         <div style={{
           position: "absolute",
           inset: 0,
@@ -227,7 +227,7 @@ export default function Landing() {
             </span>
           </div>
 
-          {/* Heading — matches screenshot exactly */}
+          {/* Heading */}
           <h1 style={{
             fontSize: isMobile ? "44px" : isTablet ? "56px" : "72px",
             fontWeight: "900",
@@ -275,7 +275,7 @@ export default function Landing() {
             ))}
           </div>
 
-          {/* Input + CTA — side by side, matches screenshot */}
+          {/* Input + CTA */}
           <div style={{
             display: "flex", gap: "10px", marginBottom: "38px",
             flexDirection: isMobile ? "column" : "row",
@@ -290,7 +290,6 @@ export default function Landing() {
               flex: 1,
               maxWidth: isMobile ? "100%" : "260px",
             }}>
-              {/* Phone icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.38)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
               </svg>
@@ -302,7 +301,6 @@ export default function Landing() {
                   background: "transparent", border: "none",
                   outline: "none", color: "#fff",
                   fontSize: "14.5px", width: "100%",
-                  "::placeholder": { color: "rgba(255,255,255,0.3)" },
                 }}
               />
             </div>
@@ -318,7 +316,7 @@ export default function Landing() {
             </button>
           </div>
 
-          {/* Social proof — avatar stack + stars */}
+          {/* Social proof */}
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <AvatarStack size={38} />
             <div>
@@ -341,7 +339,7 @@ export default function Landing() {
             overflow: "hidden",
             minHeight: isTablet ? "540px" : "680px",
           }}>
-            {/* Main purple glow orb behind model */}
+            {/* Main purple glow orb */}
             <div style={{
               position: "absolute",
               width: "600px", height: "700px",
@@ -366,7 +364,7 @@ export default function Landing() {
               zIndex: 0,
             }} />
 
-            {/* Hero image — estilos exactos que funcionan */}
+            {/* Hero image */}
             <img
               src={heroImg}
               alt="Profesional Bellason"
@@ -381,7 +379,7 @@ export default function Landing() {
                 width: "auto",
                 maxWidth: "none",
                 display: "block",
-                filter: "drop-shadow(rgba(139,27,255,0.6) 0px 0px 60px)",
+                filter: "drop-shadow(rgba(139,27,255,0.6) 0px 0px 33px)",
               }}
             />
 
@@ -393,7 +391,7 @@ export default function Landing() {
               zIndex: 2, pointerEvents: "none",
             }} />
 
-            {/* ── Floating cards — desktop only ── */}
+            {/* Floating cards — desktop only */}
             {isDesktop && (
               <>
                 {/* Card 1: Profesionales verificados */}

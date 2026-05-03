@@ -1,9 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 
-import Landing   from './pages/Landing'
-import Login     from './pages/Login'
-import Register  from './pages/Register'
+import Landing        from './pages/Landing'
+import Login          from './pages/Login'
+import Register       from './pages/Register'
+import ResetPassword  from './pages/ResetPassword'
 
 import NewRequest from './pages/client/NewRequest'
 import MyRequests from './pages/client/MyRequests'
@@ -12,6 +13,7 @@ import Feed       from './pages/provider/Feed'
 import LeadDetail from './pages/provider/LeadDetail'
 import MyLeads    from './pages/provider/MyLeads'
 import Profile    from './pages/provider/Profile'
+import Recargar   from './pages/provider/Recargar'
 
 function App() {
   const { user, role, loading } = useAuth()
@@ -21,9 +23,10 @@ function App() {
   return (
     <Routes>
       {/* Públicas */}
-      <Route path="/"         element={<Landing />} />
-      <Route path="/login"    element={<Login />} />
-      <Route path="/registro" element={<Register />} />
+      <Route path="/"               element={<Landing />} />
+      <Route path="/login"          element={<Login />} />
+      <Route path="/registro"       element={<Register />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Perfil público */}
       <Route path="/perfil/:id" element={<Profile />} />
@@ -48,6 +51,9 @@ function App() {
       } />
       <Route path="/mi-perfil" element={
         user && role === 'provider' ? <Profile /> : <Navigate to="/login" />
+      } />
+      <Route path="/recargar" element={
+        user && role === 'provider' ? <Recargar /> : <Navigate to="/login" />
       } />
     </Routes>
   )
